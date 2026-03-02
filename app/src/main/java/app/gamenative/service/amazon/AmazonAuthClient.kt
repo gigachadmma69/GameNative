@@ -64,32 +64,33 @@ object AmazonAuthClient {
                 .post(body.toString().toRequestBody(JSON_MEDIA))
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            val responseBody = response.body?.string() ?: ""
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string() ?: ""
 
-            if (!response.isSuccessful) {
-                Timber.e("[Amazon] Device registration failed: ${response.code} - $responseBody")
-                return@withContext Result.failure(Exception("HTTP ${response.code}: $responseBody"))
+                if (!response.isSuccessful) {
+                    Timber.e("[Amazon] Device registration failed: ${response.code} - $responseBody")
+                    return@withContext Result.failure(Exception("HTTP ${response.code}: $responseBody"))
+                }
+
+                val json = JSONObject(responseBody)
+
+                // The response nests tokens inside response → success → tokens → bearer
+                val tokensObj = json
+                    .getJSONObject("response")
+                    .getJSONObject("success")
+                    .getJSONObject("tokens")
+                    .getJSONObject("bearer")
+
+                val authResponse = AmazonAuthResponse(
+                    accessToken = tokensObj.getString("access_token"),
+                    refreshToken = tokensObj.getString("refresh_token"),
+                    expiresIn = tokensObj.optInt("expires_in", 3600),
+                    tokenType = tokensObj.optString("token_type", "bearer"),
+                )
+
+                Timber.i("[Amazon] Device registration successful")
+                Result.success(authResponse)
             }
-
-            val json = JSONObject(responseBody)
-
-            // The response nests tokens inside response → success → tokens → bearer
-            val tokensObj = json
-                .getJSONObject("response")
-                .getJSONObject("success")
-                .getJSONObject("tokens")
-                .getJSONObject("bearer")
-
-            val authResponse = AmazonAuthResponse(
-                accessToken = tokensObj.getString("access_token"),
-                refreshToken = tokensObj.getString("refresh_token"),
-                expiresIn = tokensObj.optInt("expires_in", 3600),
-                tokenType = tokensObj.optString("token_type", "bearer"),
-            )
-
-            Timber.i("[Amazon] Device registration successful")
-            Result.success(authResponse)
         } catch (e: Exception) {
             Timber.e(e, "[Amazon] Device registration exception")
             Result.failure(e)
@@ -119,25 +120,26 @@ object AmazonAuthClient {
                 .post(body.toString().toRequestBody(JSON_MEDIA))
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            val responseBody = response.body?.string() ?: ""
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string() ?: ""
 
-            if (!response.isSuccessful) {
-                Timber.e("[Amazon] Token refresh failed: ${response.code} - $responseBody")
-                return@withContext Result.failure(Exception("HTTP ${response.code}: $responseBody"))
+                if (!response.isSuccessful) {
+                    Timber.e("[Amazon] Token refresh failed: ${response.code} - $responseBody")
+                    return@withContext Result.failure(Exception("HTTP ${response.code}: $responseBody"))
+                }
+
+                val json = JSONObject(responseBody)
+
+                val authResponse = AmazonAuthResponse(
+                    accessToken = json.getString("access_token"),
+                    refreshToken = refreshToken, // refresh token stays the same
+                    expiresIn = json.optInt("expires_in", 3600),
+                    tokenType = json.optString("token_type", "bearer"),
+                )
+
+                Timber.i("[Amazon] Token refresh successful")
+                Result.success(authResponse)
             }
-
-            val json = JSONObject(responseBody)
-
-            val authResponse = AmazonAuthResponse(
-                accessToken = json.getString("access_token"),
-                refreshToken = refreshToken, // refresh token stays the same
-                expiresIn = json.optInt("expires_in", 3600),
-                tokenType = json.optString("token_type", "bearer"),
-            )
-
-            Timber.i("[Amazon] Token refresh successful")
-            Result.success(authResponse)
         } catch (e: Exception) {
             Timber.e(e, "[Amazon] Token refresh exception")
             Result.failure(e)

@@ -54,34 +54,35 @@ object EpicAuthClient {
                 .post(requestBody)
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            val body = response.body?.string() ?: ""
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: ""
 
-            if (!response.isSuccessful) {
-                Timber.e("Authentication failed: ${response.code} - $body")
-                return@withContext Result.failure(Exception("HTTP ${response.code}: $body"))
+                if (!response.isSuccessful) {
+                    Timber.e("Authentication failed: ${response.code} - $body")
+                    return@withContext Result.failure(Exception("HTTP ${response.code}: $body"))
+                }
+
+                val json = JSONObject(body)
+
+                if (json.has("errorCode")) {
+                    val errorCode = json.getString("errorCode")
+                    val errorMessage = json.optString("errorMessage", "Authentication failed")
+                    Timber.e("Epic auth error: $errorCode - $errorMessage")
+                    return@withContext Result.failure(Exception("$errorCode: $errorMessage"))
+                }
+
+                val authResponse = EpicAuthResponse(
+                    accessToken = json.getString("access_token"),
+                    refreshToken = json.getString("refresh_token"),
+                    accountId = json.getString("account_id"),
+                    displayName = json.optString("displayName", ""),
+                    expiresAt = parseExpiresAt(json),
+                    expiresIn = json.getInt("expires_in"),
+                )
+
+                Timber.i("Successfully authenticated with Epic")
+                Result.success(authResponse)
             }
-
-            val json = JSONObject(body)
-
-            if (json.has("errorCode")) {
-                val errorCode = json.getString("errorCode")
-                val errorMessage = json.optString("errorMessage", "Authentication failed")
-                Timber.e("Epic auth error: $errorCode - $errorMessage")
-                return@withContext Result.failure(Exception("$errorCode: $errorMessage"))
-            }
-
-            val authResponse = EpicAuthResponse(
-                accessToken = json.getString("access_token"),
-                refreshToken = json.getString("refresh_token"),
-                accountId = json.getString("account_id"),
-                displayName = json.optString("displayName", ""),
-                expiresAt = parseExpiresAt(json),
-                expiresIn = json.getInt("expires_in"),
-            )
-
-            Timber.i("Successfully authenticated with Epic")
-            Result.success(authResponse)
         } catch (e: Exception) {
             Timber.e(e, "Failed to authenticate with Epic")
             Result.failure(e)
@@ -110,34 +111,35 @@ object EpicAuthClient {
                 .post(requestBody)
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            val body = response.body?.string() ?: ""
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: ""
 
-            if (!response.isSuccessful) {
-                Timber.e("Token refresh failed: ${response.code} - $body")
-                return@withContext Result.failure(Exception("HTTP ${response.code}: $body"))
+                if (!response.isSuccessful) {
+                    Timber.e("Token refresh failed: ${response.code} - $body")
+                    return@withContext Result.failure(Exception("HTTP ${response.code}: $body"))
+                }
+
+                val json = JSONObject(body)
+
+                if (json.has("errorCode")) {
+                    val errorCode = json.getString("errorCode")
+                    val errorMessage = json.optString("errorMessage", "Token refresh failed")
+                    Timber.e("Epic token refresh error: $errorCode - $errorMessage")
+                    return@withContext Result.failure(Exception("$errorCode: $errorMessage"))
+                }
+
+                val authResponse = EpicAuthResponse(
+                    accessToken = json.getString("access_token"),
+                    refreshToken = json.getString("refresh_token"),
+                    accountId = json.getString("account_id"),
+                    displayName = json.optString("displayName", ""),
+                    expiresAt = parseExpiresAt(json),
+                    expiresIn = json.getInt("expires_in"),
+                )
+
+                Timber.i("Successfully refreshed Epic token")
+                Result.success(authResponse)
             }
-
-            val json = JSONObject(body)
-
-            if (json.has("errorCode")) {
-                val errorCode = json.getString("errorCode")
-                val errorMessage = json.optString("errorMessage", "Token refresh failed")
-                Timber.e("Epic token refresh error: $errorCode - $errorMessage")
-                return@withContext Result.failure(Exception("$errorCode: $errorMessage"))
-            }
-
-            val authResponse = EpicAuthResponse(
-                accessToken = json.getString("access_token"),
-                refreshToken = json.getString("refresh_token"),
-                accountId = json.getString("account_id"),
-                displayName = json.optString("displayName", ""),
-                expiresAt = parseExpiresAt(json),
-                expiresIn = json.getInt("expires_in"),
-            )
-
-            Timber.i("Successfully refreshed Epic token")
-            Result.success(authResponse)
         } catch (e: Exception) {
             Timber.e(e, "Failed to refresh Epic token")
             Result.failure(e)
@@ -159,26 +161,27 @@ object EpicAuthClient {
                 .get()
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            val body = response.body?.string() ?: ""
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: ""
 
-            if (!response.isSuccessful) {
-                Timber.e("Failed to get game exchange token: ${response.code} - $body")
-                return@withContext Result.failure(Exception("HTTP ${response.code}: $body"))
+                if (!response.isSuccessful) {
+                    Timber.e("Failed to get game exchange token: ${response.code} - $body")
+                    return@withContext Result.failure(Exception("HTTP ${response.code}: $body"))
+                }
+
+                val json = JSONObject(body)
+
+                if (json.has("errorCode")) {
+                    val errorCode = json.getString("errorCode")
+                    val errorMessage = json.optString("errorMessage", "Failed to get exchange token")
+                    Timber.e("Exchange token error: $errorCode - $errorMessage")
+                    return@withContext Result.failure(Exception("$errorCode: $errorMessage"))
+                }
+
+                val code = json.getString("code")
+                Timber.d("Successfully obtained game exchange token")
+                Result.success(code)
             }
-
-            val json = JSONObject(body)
-
-            if (json.has("errorCode")) {
-                val errorCode = json.getString("errorCode")
-                val errorMessage = json.optString("errorMessage", "Failed to get exchange token")
-                Timber.e("Exchange token error: $errorCode - $errorMessage")
-                return@withContext Result.failure(Exception("$errorCode: $errorMessage"))
-            }
-
-            val code = json.getString("code")
-            Timber.d("Successfully obtained game exchange token")
-            Result.success(code)
         } catch (e: Exception) {
             Timber.e(e, "Exception getting game exchange token")
             Result.failure(e)
@@ -211,21 +214,21 @@ object EpicAuthClient {
                 .post(requestBody)
                 .build()
 
-            val response = httpClient.newCall(request).execute()
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val errorBody = response.body?.string() ?: "Unknown error"
+                    Timber.e("Failed to get ownership token: ${response.code} - $errorBody")
+                    return@withContext Result.failure(Exception("HTTP ${response.code}: $errorBody"))
+                }
 
-            if (!response.isSuccessful) {
-                val errorBody = response.body?.string() ?: "Unknown error"
-                Timber.e("Failed to get ownership token: ${response.code} - $errorBody")
-                return@withContext Result.failure(Exception("HTTP ${response.code}: $errorBody"))
+                val tokenBytes = response.body?.bytes()
+                if (tokenBytes == null || tokenBytes.isEmpty()) {
+                    return@withContext Result.failure(Exception("Empty ownership token response"))
+                }
+
+                Timber.d("Successfully obtained ownership token (${tokenBytes.size} bytes)")
+                Result.success(tokenBytes)
             }
-
-            val tokenBytes = response.body?.bytes()
-            if (tokenBytes == null || tokenBytes.isEmpty()) {
-                return@withContext Result.failure(Exception("Empty ownership token response"))
-            }
-
-            Timber.d("Successfully obtained ownership token (${tokenBytes.size} bytes)")
-            Result.success(tokenBytes)
         } catch (e: Exception) {
             Timber.e(e, "Exception getting ownership token")
             Result.failure(e)
